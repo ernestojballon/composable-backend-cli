@@ -74,6 +74,7 @@ const PRELOAD_TS = `import { fileURLToPath } from 'url';
 import {
   Logger, AppConfig, Platform, RestAutomation, EventScriptEngine, NoOpComposable
 } from 'composable-backend';
+import helloGreet from '../hello-world.task.js';
 
 const log = Logger.getInstance();
 
@@ -92,12 +93,16 @@ export class ComposableLoader {
     ComposableLoader.loaded = true;
     try {
       const configDir = getRootFolder();
-      const resourcePath = configDir + 'resources';
-      const config = AppConfig.getInstance(resourcePath);
+      // Use autoScan if available (composable-backend >= 1.2.0), otherwise register manually
+      const config = AppConfig.getInstance(configDir);
       const platform = Platform.getInstance();
 
       platform.registerComposable(NoOpComposable);
-      await platform.autoScan(configDir + '..');
+      if (typeof platform.autoScan === 'function') {
+        await platform.autoScan(configDir + '..');
+      } else {
+        platform.registerComposable(helloGreet);
+      }
 
       const eventManager = new EventScriptEngine();
       await eventManager.start();

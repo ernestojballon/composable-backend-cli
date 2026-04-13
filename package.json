@@ -1,6 +1,6 @@
 {
   "name": "@composable-backend/cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "CLI tool for scaffolding composable-backend projects, tasks, and flows",
   "type": "module",
   "license": "Apache-2.0",
