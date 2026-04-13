@@ -1,0 +1,28 @@
+{
+  "name": "@composable-backend/cli",
+  "version": "1.0.0",
+  "description": "CLI tool for scaffolding composable-backend projects, tasks, and flows",
+  "type": "module",
+  "license": "Apache-2.0",
+  "bin": {
+    "compoback": "./dist/cli.js"
+  },
+  "files": [
+    "dist/**/*"
+  ],
+  "engines": {
+    "node": ">=20.18.1"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -w"
+  },
+  "dependencies": {
+    "commander": "^13.1.0",
+    "@clack/prompts": "^0.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.2"
+  }
+}
