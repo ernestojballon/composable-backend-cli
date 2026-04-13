@@ -11,9 +11,8 @@ program
   .description('CLI for composable-backend')
   .version('1.0.0');
 
-const createCmd = program.command('create');
-createCmd
-  .command('app [name]')
+program
+  .command('create-app [name]')
   .description('Scaffold a new composable-backend project')
   .action(createApp);
 

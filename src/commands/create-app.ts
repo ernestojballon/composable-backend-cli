@@ -130,6 +130,7 @@ info.app:
   description: '{{description}}'
 
 server.port: \${SERVER_PORT:8086}
+environment: \${ENVIRONMENT:development}
 rest.automation: true
 
 log.format: 'text'
@@ -463,7 +464,7 @@ console.log(\`Assembled resources into \${dst}\`);
 `;
 
 export async function createApp(nameArg?: string): Promise<void> {
-  clack.intro('compoback create app');
+  clack.intro('compoback create-app');
 
   let name = nameArg;
   if (!name) {
