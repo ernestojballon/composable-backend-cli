@@ -4,6 +4,10 @@
   "description": "CLI tool for scaffolding composable-backend projects, tasks, and flows",
   "type": "module",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ernestojballon/composable-backend-cli"
+  },
   "bin": {
     "compoback": "./dist/cli.js"
   },
