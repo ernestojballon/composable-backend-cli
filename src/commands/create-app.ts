@@ -28,7 +28,7 @@ const PACKAGE_JSON = `{
     "tslib": "^2.8.1"
   },
   "devDependencies": {
-    "@composable-backend/testing": "^1.0.0",
+    "@composable-backend/testing": "^1.1.0",
     "@types/node": "^22.0.0",
     "tsx": "^4.21.0",
     "typescript": "^5.8.2",
@@ -251,26 +251,19 @@ The flow id in rest.yaml must match the \`flow.id\` in your \`*.flow.yml\` file,
 and the task \`process\` in the flow must match the \`process\` in your \`*.task.ts\` file.
 `;
 
-const HELLO_TEST = `import { describe, expect, it, beforeAll } from 'vitest';
-import { TestHarness } from '@composable-backend/testing';
+const HELLO_TEST = `import { describe, expect, it } from 'vitest';
+import { testTask } from '@composable-backend/testing';
 import helloGreet from '../src/samples/hello-world.task.js';
 
 describe('hello greeting', () => {
-  let harness: TestHarness;
-
-  beforeAll(async () => {
-    harness = await TestHarness.setup();
-    harness.register(helloGreet);
-  });
-
   it('greets by name', async () => {
-    const result = await harness.call<{ message: string }>('v1.hello.greet', { name: 'Ada' });
-    expect(result.message).toBe('Hello Ada!');
+    const result = await testTask(helloGreet, { name: 'Ada' });
+    expect(result).toEqual({ message: 'Hello Ada!' });
   });
 
   it('defaults to world', async () => {
-    const result = await harness.call<{ message: string }>('v1.hello.greet', {});
-    expect(result.message).toBe('Hello world!');
+    const result = await testTask(helloGreet, {});
+    expect(result).toEqual({ message: 'Hello world!' });
   });
 });
 `;
@@ -358,44 +351,45 @@ npm run test:watch    # watch mode
 
 ### Writing a test
 
+A composable is just input -> function -> output. Test it directly:
+
 \`\`\`typescript
-import { describe, expect, it, beforeAll } from 'vitest';
-import { TestHarness } from '@composable-backend/testing';
+import { describe, expect, it } from 'vitest';
+import { testTask } from '@composable-backend/testing';
 import myTask from '../src/my-task.task.js';
 
 describe('my task', () => {
-  let harness: TestHarness;
-
-  beforeAll(async () => {
-    harness = await TestHarness.setup();
-    harness.register(myTask);
-  });
-
   it('returns expected result', async () => {
-    const result = await harness.call('v1.my.task', { input: 'data' });
+    const result = await testTask(myTask, { input: 'data' });
     expect(result).toEqual({ output: 'data' });
   });
 });
 \`\`\`
 
-### Spying on events
+No setup, no beforeAll, no platform initialization. Just import and test.
 
-Use \`harness.spy()\` to capture events sent to any route:
+### Testing with headers
 
 \`\`\`typescript
-const spy = harness.spy('kafka.notification');
-
-// ... run code that sends to kafka.notification ...
-
-expect(spy.count()).toBe(1);
-expect(spy.last().body).toEqual({ content: 'hello' });
-expect(spy.hasHeader('topic', 'leads.scored')).toBe(true);
+const result = await testTask(myTask, { data: 'payload' }, { topic: 'leads' });
 \`\`\`
 
-### Test config
+### Spying on events (advanced)
 
-Tests use \`tests/resources/application.yml\` which overrides the main config.
-Log level is set to \`warn\` to keep test output clean.
+When you need to test task-to-task communication, use \`TestHarness\`:
+
+\`\`\`typescript
+import { TestHarness } from '@composable-backend/testing';
+
+const harness = await TestHarness.setup();
+harness.register(myTask);
+const spy = harness.spy('kafka.notification');
+
+await harness.call('v1.my.task', { data: 'hello' });
+
+expect(spy.count()).toBe(1);
+expect(spy.hasHeader('topic', 'leads.scored')).toBe(true);
+\`\`\`
 
 ## Learn more
 
