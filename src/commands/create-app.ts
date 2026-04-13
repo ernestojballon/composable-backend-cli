@@ -22,7 +22,7 @@ const PACKAGE_JSON = `{
     "dev": "tsx watch --include 'src/**/*' src/main.ts"
   },
   "dependencies": {
-    "composable-backend": "^1.1.0",
+    "composable-backend": "^1.2.0",
     "tslib": "^2.8.1"
   },
   "devDependencies": {
@@ -74,7 +74,6 @@ const PRELOAD_TS = `import { fileURLToPath } from 'url';
 import {
   Logger, AppConfig, Platform, RestAutomation, EventScriptEngine, NoOpComposable
 } from 'composable-backend';
-import helloGreet from '../hello-world.task.js';
 
 const log = Logger.getInstance();
 
@@ -93,16 +92,12 @@ export class ComposableLoader {
     ComposableLoader.loaded = true;
     try {
       const configDir = getRootFolder();
-      // Use autoScan if available (composable-backend >= 1.2.0), otherwise register manually
       const config = AppConfig.getInstance(configDir);
       const platform = Platform.getInstance();
 
+      // Auto-discover *.task.ts and *.flow.yml files from src/
       platform.registerComposable(NoOpComposable);
-      if (typeof platform.autoScan === 'function') {
-        await platform.autoScan(configDir + '..');
-      } else {
-        platform.registerComposable(helloGreet);
-      }
+      await platform.autoScan(configDir + '..');
 
       const eventManager = new EventScriptEngine();
       await eventManager.start();
@@ -130,11 +125,11 @@ info.app:
   version: '0.1.0'
   description: '{{description}}'
 
-server.port: 8086
+server.port: \${SERVER_PORT:8086}
 rest.automation: true
 
 log.format: 'text'
-log.level: 'info'
+log.level: \${LOG_LEVEL:info}
 
 yaml.rest.automation: 'classpath:/rest.yaml'
 `;
@@ -163,6 +158,12 @@ cors:
 
 const HELLO_TASK = `import { defineComposable, EventEnvelope } from 'composable-backend';
 
+/**
+ * Sample task: returns a greeting message.
+ *
+ * This file is auto-discovered by the framework because it follows
+ * the *.task.ts naming convention. You can place it anywhere inside src/.
+ */
 export default defineComposable({
   process: 'v1.hello.greet',
   handler: async (evt: EventEnvelope) => {
@@ -193,9 +194,125 @@ tasks:
     execution: end
 `;
 
+const SAMPLES_README = `# Sample Task and Flow
+
+This folder contains a sample task and flow to help you get started.
+
+## File conventions
+
+The framework auto-discovers files by naming convention:
+
+| Convention | What it does |
+|---|---|
+| \`*.task.ts\` | Auto-registered as a composable function |
+| \`*.flow.yml\` | Auto-loaded as a flow definition |
+
+You can place these files **anywhere** inside \`src/\` — the scanner searches recursively.
+
+## How tasks and flows connect
+
+1. A **REST endpoint** in \`src/config/rest.yaml\` routes an HTTP request to a **flow**
+2. The **flow** (\`*.flow.yml\`) defines the sequence of **tasks** to execute
+3. Each **task** (\`*.task.ts\`) is a self-contained function that processes an event
+
+\`\`\`
+HTTP request → rest.yaml → flow (*.flow.yml) → task (*.task.ts) → response
+\`\`\`
+
+## Generating new tasks and flows
+
+Use the CLI to scaffold new files:
+
+\`\`\`bash
+npx compoback new task my-task-name          # creates src/my-task-name.task.ts
+npx compoback new task my-task-name leads    # creates src/leads/my-task-name.task.ts
+npx compoback new flow my-flow-name          # creates src/my-flow-name.flow.yml
+npx compoback new flow my-flow-name leads    # creates src/leads/my-flow-name.flow.yml
+\`\`\`
+
+## Wiring a new endpoint
+
+After creating a task and flow, add a REST endpoint in \`src/config/rest.yaml\`:
+
+\`\`\`yaml
+  - service: 'http.flow.adapter'
+    methods: ['POST']
+    url: '/api/my-endpoint'
+    flow: 'my-flow-name'
+    timeout: 10s
+\`\`\`
+
+The flow id in rest.yaml must match the \`flow.id\` in your \`*.flow.yml\` file,
+and the task \`process\` in the flow must match the \`process\` in your \`*.task.ts\` file.
+`;
+
 const ENV_FILE = `# Environment variables
+# These override values in application.yml via \${VAR_NAME:default} syntax
+
+SERVER_PORT=8086
 LOG_LEVEL=info
 ENVIRONMENT=development
+`;
+
+const ROOT_README = `# {{name}}
+
+{{description}}
+
+## Quick start
+
+\`\`\`bash
+npm run dev          # start dev server (instant restart on file changes)
+curl http://localhost:8086/api/hello/Ada
+\`\`\`
+
+## Commands
+
+| Command | Description |
+|---|---|
+| \`npm run dev\` | Start dev server with hot reload (tsx watch) |
+| \`npm run build\` | Production build (TypeScript + copy resources) |
+| \`npm start\` | Run production build |
+| \`npx compoback new task <name> [path]\` | Generate a new task file |
+| \`npx compoback new flow <name> [path]\` | Generate a new flow file |
+
+## Project structure
+
+\`\`\`
+src/
+  main.ts                    Entry point — loads .env and starts the platform
+  config/
+    preload.ts               Platform bootstrap — auto-discovers tasks and flows
+    application.yml          App config (name, port, log level, modules)
+    rest.yaml                REST endpoint definitions (URL, method, flow, auth)
+  samples/
+    hello-world.task.ts      Sample task — returns a greeting
+    hello.flow.yml           Sample flow — wires the task to an HTTP endpoint
+    README.md                Explains file conventions and how to add new endpoints
+copy-resources.js            Build script — copies YAML files to dist/ for production
+.env                         Environment variables (port, log level)
+\`\`\`
+
+## File conventions
+
+| Pattern | Purpose |
+|---|---|
+| \`*.task.ts\` | Auto-discovered as a composable function (must default-export \`defineComposable()\`) |
+| \`*.flow.yml\` | Auto-discovered as a flow definition |
+
+Place them anywhere inside \`src/\` — organize by feature, domain, or flat. The framework scans recursively.
+
+## Configuration
+
+- **Port**: set \`SERVER_PORT\` in \`.env\` or \`server.port\` in \`application.yml\`
+- **Log level**: set \`LOG_LEVEL\` in \`.env\` or \`log.level\` in \`application.yml\`
+- **REST endpoints**: defined in \`src/config/rest.yaml\`
+- **CORS**: configured in the \`cors\` section of \`rest.yaml\`
+
+## Learn more
+
+- [composable-backend documentation](https://github.com/ernestojballon/composable-backend)
+- [REST Automation guide](https://github.com/ernestojballon/composable-backend/blob/main/guides/04-REST-AUTOMATION.md)
+- [Event Scripting guide](https://github.com/ernestojballon/composable-backend/blob/main/guides/05-EVENT-SCRIPTING.md)
 `;
 
 const COPY_RESOURCES = `import fs from 'fs';
@@ -291,17 +408,25 @@ export async function createApp(nameArg?: string): Promise<void> {
 
   const vars = { name, description };
 
-  // Create files
+  // Root files
   writeFile(path.join(projectDir, 'package.json'), render(PACKAGE_JSON, vars));
   writeFile(path.join(projectDir, 'tsconfig.json'), TSCONFIG);
   writeFile(path.join(projectDir, '.env'), ENV_FILE);
   writeFile(path.join(projectDir, 'copy-resources.js'), COPY_RESOURCES);
+  writeFile(path.join(projectDir, 'README.md'), render(ROOT_README, vars));
+
+  // src/
   writeFile(path.join(projectDir, 'src', 'main.ts'), MAIN_TS);
+
+  // src/config/
   writeFile(path.join(projectDir, 'src', 'config', 'preload.ts'), PRELOAD_TS);
   writeFile(path.join(projectDir, 'src', 'config', 'application.yml'), render(APPLICATION_YML, vars));
   writeFile(path.join(projectDir, 'src', 'config', 'rest.yaml'), REST_YAML);
-  writeFile(path.join(projectDir, 'src', 'hello-world.task.ts'), HELLO_TASK);
-  writeFile(path.join(projectDir, 'src', 'hello.flow.yml'), HELLO_FLOW);
+
+  // src/samples/ — sample task, flow, and README
+  writeFile(path.join(projectDir, 'src', 'samples', 'hello-world.task.ts'), HELLO_TASK);
+  writeFile(path.join(projectDir, 'src', 'samples', 'hello.flow.yml'), HELLO_FLOW);
+  writeFile(path.join(projectDir, 'src', 'samples', 'README.md'), SAMPLES_README);
 
   spinner.stop('Project scaffolded');
 
