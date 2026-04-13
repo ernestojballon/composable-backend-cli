@@ -19,16 +19,20 @@ const PACKAGE_JSON = `{
     "copy-resources": "node copy-resources.js",
     "build": "npm run clean && tsc && npm run copy-resources",
     "start": "node dist/main.js",
-    "dev": "tsx watch --include 'src/**/*' src/main.ts"
+    "dev": "tsx watch --include 'src/**/*' src/main.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "composable-backend": "^1.2.0",
     "tslib": "^2.8.1"
   },
   "devDependencies": {
+    "@composable-backend/testing": "^1.0.0",
     "@types/node": "^22.0.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "vitest": "^3.2.4"
   }
 }
 `;
@@ -246,6 +250,34 @@ The flow id in rest.yaml must match the \`flow.id\` in your \`*.flow.yml\` file,
 and the task \`process\` in the flow must match the \`process\` in your \`*.task.ts\` file.
 `;
 
+const HELLO_TEST = `import { describe, expect, it, beforeAll } from 'vitest';
+import { TestHarness } from '@composable-backend/testing';
+import helloGreet from '../src/samples/hello-world.task.js';
+
+describe('hello greeting', () => {
+  let harness: TestHarness;
+
+  beforeAll(async () => {
+    harness = await TestHarness.setup();
+    harness.register(helloGreet);
+  });
+
+  it('greets by name', async () => {
+    const result = await harness.call<{ message: string }>('v1.hello.greet', { name: 'Ada' });
+    expect(result.message).toBe('Hello Ada!');
+  });
+
+  it('defaults to world', async () => {
+    const result = await harness.call<{ message: string }>('v1.hello.greet', {});
+    expect(result.message).toBe('Hello world!');
+  });
+});
+`;
+
+const TEST_APP_YML = `application.name: '{{name}}-test'
+log.level: 'warn'
+`;
+
 const ENV_FILE = `# Environment variables
 # These override values in application.yml via \${VAR_NAME:default} syntax
 
@@ -274,6 +306,8 @@ curl http://localhost:8086/api/hello/Ada
 | \`npm start\` | Run production build |
 | \`npx compoback new task <name> [path]\` | Generate a new task file |
 | \`npx compoback new flow <name> [path]\` | Generate a new flow file |
+| \`npm test\` | Run tests (vitest) |
+| \`npm run test:watch\` | Run tests in watch mode |
 
 ## Project structure
 
@@ -288,6 +322,10 @@ src/
     hello-world.task.ts      Sample task — returns a greeting
     hello.flow.yml           Sample flow — wires the task to an HTTP endpoint
     README.md                Explains file conventions and how to add new endpoints
+tests/
+  hello.test.ts              Sample test using @composable-backend/testing
+  resources/
+    application.yml          Test-specific config (lower log level)
 copy-resources.js            Build script — copies YAML files to dist/ for production
 .env                         Environment variables (port, log level)
 \`\`\`
@@ -307,6 +345,56 @@ Place them anywhere inside \`src/\` — organize by feature, domain, or flat. Th
 - **Log level**: set \`LOG_LEVEL\` in \`.env\` or \`log.level\` in \`application.yml\`
 - **REST endpoints**: defined in \`src/config/rest.yaml\`
 - **CORS**: configured in the \`cors\` section of \`rest.yaml\`
+
+## Testing
+
+Tests use [vitest](https://vitest.dev/) and [@composable-backend/testing](https://github.com/ernestojballon/composable-backend-testing) for a minimal setup.
+
+\`\`\`bash
+npm test              # run once
+npm run test:watch    # watch mode
+\`\`\`
+
+### Writing a test
+
+\`\`\`typescript
+import { describe, expect, it, beforeAll } from 'vitest';
+import { TestHarness } from '@composable-backend/testing';
+import myTask from '../src/my-task.task.js';
+
+describe('my task', () => {
+  let harness: TestHarness;
+
+  beforeAll(async () => {
+    harness = await TestHarness.setup();
+    harness.register(myTask);
+  });
+
+  it('returns expected result', async () => {
+    const result = await harness.call('v1.my.task', { input: 'data' });
+    expect(result).toEqual({ output: 'data' });
+  });
+});
+\`\`\`
+
+### Spying on events
+
+Use \`harness.spy()\` to capture events sent to any route:
+
+\`\`\`typescript
+const spy = harness.spy('kafka.notification');
+
+// ... run code that sends to kafka.notification ...
+
+expect(spy.count()).toBe(1);
+expect(spy.last().body).toEqual({ content: 'hello' });
+expect(spy.hasHeader('topic', 'leads.scored')).toBe(true);
+\`\`\`
+
+### Test config
+
+Tests use \`tests/resources/application.yml\` which overrides the main config.
+Log level is set to \`warn\` to keep test output clean.
 
 ## Learn more
 
@@ -427,6 +515,10 @@ export async function createApp(nameArg?: string): Promise<void> {
   writeFile(path.join(projectDir, 'src', 'samples', 'hello-world.task.ts'), HELLO_TASK);
   writeFile(path.join(projectDir, 'src', 'samples', 'hello.flow.yml'), HELLO_FLOW);
   writeFile(path.join(projectDir, 'src', 'samples', 'README.md'), SAMPLES_README);
+
+  // tests/
+  writeFile(path.join(projectDir, 'tests', 'hello.test.ts'), HELLO_TEST);
+  writeFile(path.join(projectDir, 'tests', 'resources', 'application.yml'), render(TEST_APP_YML, vars));
 
   spinner.stop('Project scaffolded');
 
