@@ -16,8 +16,8 @@ const PACKAGE_JSON = `{
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "copy-resources": "node copy-resources.js",
-    "build": "npm run clean && tsc && npm run copy-resources",
+    "build": "npm run clean && tsc",
+    "build:run": "npm run build && node dist/main.js",
     "start": "node dist/main.js",
     "dev": "tsx watch --include 'src/**/*' src/main.ts",
     "test": "vitest run",
@@ -57,71 +57,9 @@ const TSCONFIG = `{
 }
 `;
 
-const MAIN_TS = `import { ComposableLoader } from './config/preload.js';
+const MAIN_TS = `import { composable } from 'composable-backend';
 
-async function main() {
-  try {
-    if (typeof (process as any).loadEnvFile === 'function') {
-      try { (process as any).loadEnvFile(); } catch { /* no .env is fine */ }
-    }
-  } catch { /* ignore */ }
-  await ComposableLoader.initialize();
-}
-
-main().catch((e) => {
-  console.error('Fatal startup error:', e);
-  process.exit(1);
-});
-`;
-
-const PRELOAD_TS = `import { fileURLToPath } from 'url';
-import {
-  Logger, AppConfig, Platform, RestAutomation, EventScriptEngine, NoOpComposable
-} from 'composable-backend';
-
-const log = Logger.getInstance();
-
-function getRootFolder(): string {
-  const folder = fileURLToPath(new URL('.', import.meta.url));
-  const filePath = folder.includes('\\\\') ? folder.replaceAll('\\\\', '/') : folder;
-  const colon = filePath.indexOf(':');
-  return colon === 1 ? filePath.substring(colon + 1) : filePath;
-}
-
-export class ComposableLoader {
-  private static loaded = false;
-
-  static async initialize(serverPort?: number): Promise<void> {
-    if (ComposableLoader.loaded) return;
-    ComposableLoader.loaded = true;
-    try {
-      const configDir = getRootFolder();
-      const config = AppConfig.getInstance(configDir);
-      const platform = Platform.getInstance();
-
-      // Auto-discover *.task.ts and *.flow.yml files from src/
-      platform.registerComposable(NoOpComposable);
-      await platform.autoScan(configDir + '..');
-
-      const eventManager = new EventScriptEngine();
-      await eventManager.start();
-
-      if (serverPort) {
-        config.set('server.port', parseInt(String(serverPort)));
-      }
-      if ('true' == config.getProperty('rest.automation')) {
-        const server = RestAutomation.getInstance();
-        await server.start();
-      }
-
-      platform.runForever();
-      await platform.getReady();
-    } catch (e) {
-      log.error(\`Unable to preload - \${(e as Error).message}\`);
-      throw e;
-    }
-  }
-}
+await composable();
 `;
 
 const APPLICATION_YML = `application.name: '{{name}}'
@@ -251,10 +189,9 @@ curl http://localhost:8086/api/hello/Ada
 
 \`\`\`
 src/
-  main.ts                    Entry point — loads .env and starts the platform
+  main.ts                    Entry point — 3 lines, starts the app
   config/
-    preload.ts               Platform bootstrap — auto-discovers tasks and flows
-    application.yml          App config (name, port, log level, modules)
+    application.yml          App config (name, port, log level)
     rest.yaml                REST endpoint definitions (URL, method, flow, auth)
   tasks/
     hello-world.task.ts      Sample task — returns a greeting
@@ -262,7 +199,6 @@ src/
     hello.flow.yml           Sample flow — wires the task to an HTTP endpoint
 tests/
   hello.test.ts              Sample test using @composable-backend/testing
-copy-resources.js            Build script — copies YAML files to dist/ for production
 .env                         Environment variables (port, log level)
 \`\`\`
 
@@ -340,65 +276,6 @@ expect(spy.hasHeader('topic', 'leads.scored')).toBe(true);
 - [Event Scripting guide](https://github.com/ernestojballon/composable-backend/blob/main/guides/05-EVENT-SCRIPTING.md)
 `;
 
-const COPY_RESOURCES = `import fs from 'fs';
-import path from 'path';
-
-const dst = path.resolve('dist/config/resources');
-
-function copyDir(from, to) {
-  fs.mkdirSync(to, { recursive: true });
-  for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
-    const s = path.join(from, entry.name);
-    const d = path.join(to, entry.name);
-    if (entry.isDirectory()) copyDir(s, d);
-    else fs.copyFileSync(s, d);
-  }
-}
-
-// Copy config YAML files
-const configSrc = path.resolve('src/config');
-fs.mkdirSync(dst, { recursive: true });
-for (const file of ['application.yml', 'rest.yaml']) {
-  const s = path.join(configSrc, file);
-  if (fs.existsSync(s)) {
-    fs.copyFileSync(s, path.join(dst, file));
-  }
-}
-
-// Scan all of src/ for *.flow.yml files and copy them into dist/
-function findFlowFiles(dir) {
-  const results = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory() && entry.name !== 'config') {
-      results.push(...findFlowFiles(full));
-    } else if (entry.isFile() && entry.name.endsWith('.flow.yml')) {
-      results.push(full);
-    }
-  }
-  return results;
-}
-
-const srcDir = path.resolve('src');
-const flowFiles = findFlowFiles(srcDir);
-if (flowFiles.length > 0) {
-  const flowsDst = path.join(dst, 'flows');
-  fs.mkdirSync(flowsDst, { recursive: true });
-  for (const flowPath of flowFiles) {
-    const name = path.basename(flowPath);
-    fs.copyFileSync(flowPath, path.join(flowsDst, name));
-  }
-}
-
-// Copy public directory if it exists
-const publicSrc = path.resolve('src/config/public');
-if (fs.existsSync(publicSrc)) {
-  copyDir(publicSrc, path.join(dst, 'public'));
-}
-
-console.log(\`Assembled resources into \${dst}\`);
-`;
-
 export async function createApp(nameArg?: string): Promise<void> {
   clack.intro('compoback create-app');
 
@@ -437,14 +314,10 @@ export async function createApp(nameArg?: string): Promise<void> {
   writeFile(path.join(projectDir, 'package.json'), render(PACKAGE_JSON, vars));
   writeFile(path.join(projectDir, 'tsconfig.json'), TSCONFIG);
   writeFile(path.join(projectDir, '.env'), ENV_FILE);
-  writeFile(path.join(projectDir, 'copy-resources.js'), COPY_RESOURCES);
   writeFile(path.join(projectDir, 'README.md'), render(ROOT_README, vars));
 
   // src/
   writeFile(path.join(projectDir, 'src', 'main.ts'), MAIN_TS);
-
-  // src/config/
-  writeFile(path.join(projectDir, 'src', 'config', 'preload.ts'), PRELOAD_TS);
   writeFile(path.join(projectDir, 'src', 'config', 'application.yml'), render(APPLICATION_YML, vars));
   writeFile(path.join(projectDir, 'src', 'config', 'rest.yaml'), REST_YAML);
 
