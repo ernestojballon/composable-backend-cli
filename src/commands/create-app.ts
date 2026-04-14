@@ -199,61 +199,9 @@ tasks:
     execution: end
 `;
 
-const SAMPLES_README = `# Sample Task and Flow
-
-This folder contains a sample task and flow to help you get started.
-
-## File conventions
-
-The framework auto-discovers files by naming convention:
-
-| Convention | What it does |
-|---|---|
-| \`*.task.ts\` | Auto-registered as a composable function |
-| \`*.flow.yml\` | Auto-loaded as a flow definition |
-
-You can place these files **anywhere** inside \`src/\` — the scanner searches recursively.
-
-## How tasks and flows connect
-
-1. A **REST endpoint** in \`src/config/rest.yaml\` routes an HTTP request to a **flow**
-2. The **flow** (\`*.flow.yml\`) defines the sequence of **tasks** to execute
-3. Each **task** (\`*.task.ts\`) is a self-contained function that processes an event
-
-\`\`\`
-HTTP request → rest.yaml → flow (*.flow.yml) → task (*.task.ts) → response
-\`\`\`
-
-## Generating new tasks and flows
-
-Use the CLI to scaffold new files:
-
-\`\`\`bash
-npx compoback new task my-task-name          # creates src/my-task-name.task.ts
-npx compoback new task my-task-name leads    # creates src/leads/my-task-name.task.ts
-npx compoback new flow my-flow-name          # creates src/my-flow-name.flow.yml
-npx compoback new flow my-flow-name leads    # creates src/leads/my-flow-name.flow.yml
-\`\`\`
-
-## Wiring a new endpoint
-
-After creating a task and flow, add a REST endpoint in \`src/config/rest.yaml\`:
-
-\`\`\`yaml
-  - service: 'http.flow.adapter'
-    methods: ['POST']
-    url: '/api/my-endpoint'
-    flow: 'my-flow-name'
-    timeout: 10s
-\`\`\`
-
-The flow id in rest.yaml must match the \`flow.id\` in your \`*.flow.yml\` file,
-and the task \`process\` in the flow must match the \`process\` in your \`*.task.ts\` file.
-`;
-
 const HELLO_TEST = `import { describe, expect, it } from 'vitest';
 import { testTask } from '@composable-backend/testing';
-import helloGreet from '../src/samples/hello-world.task.js';
+import helloGreet from '../src/tasks/hello-world.task.js';
 
 describe('hello greeting', () => {
   it('greets by name', async () => {
@@ -266,10 +214,6 @@ describe('hello greeting', () => {
     expect(result).toEqual({ message: 'Hello world!' });
   });
 });
-`;
-
-const TEST_APP_YML = `application.name: '{{name}}-test'
-log.level: 'warn'
 `;
 
 const ENV_FILE = `# Environment variables
@@ -312,14 +256,12 @@ src/
     preload.ts               Platform bootstrap — auto-discovers tasks and flows
     application.yml          App config (name, port, log level, modules)
     rest.yaml                REST endpoint definitions (URL, method, flow, auth)
-  samples/
+  tasks/
     hello-world.task.ts      Sample task — returns a greeting
+  flows/
     hello.flow.yml           Sample flow — wires the task to an HTTP endpoint
-    README.md                Explains file conventions and how to add new endpoints
 tests/
   hello.test.ts              Sample test using @composable-backend/testing
-  resources/
-    application.yml          Test-specific config (lower log level)
 copy-resources.js            Build script — copies YAML files to dist/ for production
 .env                         Environment variables (port, log level)
 \`\`\`
@@ -506,14 +448,12 @@ export async function createApp(nameArg?: string): Promise<void> {
   writeFile(path.join(projectDir, 'src', 'config', 'application.yml'), render(APPLICATION_YML, vars));
   writeFile(path.join(projectDir, 'src', 'config', 'rest.yaml'), REST_YAML);
 
-  // src/samples/ — sample task, flow, and README
-  writeFile(path.join(projectDir, 'src', 'samples', 'hello-world.task.ts'), HELLO_TASK);
-  writeFile(path.join(projectDir, 'src', 'samples', 'hello.flow.yml'), HELLO_FLOW);
-  writeFile(path.join(projectDir, 'src', 'samples', 'README.md'), SAMPLES_README);
+  // src/tasks/ and src/flows/
+  writeFile(path.join(projectDir, 'src', 'tasks', 'hello-world.task.ts'), HELLO_TASK);
+  writeFile(path.join(projectDir, 'src', 'flows', 'hello.flow.yml'), HELLO_FLOW);
 
   // tests/
   writeFile(path.join(projectDir, 'tests', 'hello.test.ts'), HELLO_TEST);
-  writeFile(path.join(projectDir, 'tests', 'resources', 'application.yml'), render(TEST_APP_YML, vars));
 
   spinner.stop('Project scaffolded');
 
